@@ -1,0 +1,949 @@
+<meta charset="utf-8">
+<title>Butler's Beach Day Forecast</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Dosis:wght@300;400;500;600;700;800&family=Fredoka:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: black marquee bar, a sticky Today/Tomorrow switch, then one band per beach (conditions | wind & surf | tides & sun) with an outlook strip */
+:root{
+  --bg:#FCF4E8; --soft:#F3E6CF; --ink:#1C1B17; --muted:#6A6253;
+  --card:#9FFCD7; --card-ink:#122019; --line:#1C1B17;
+  --bar:#050505; --bar-ink:#9FFCD7;
+  --low:#16663B; --mod:#8A5A00; --high:#B0281A;
+  --sea:#CDE9F7; --sea-ink:#0B2A3D; --chill:#2F7DE1;
+  --display:'Dosis','Trebuchet MS',system-ui,sans-serif;
+  --label:'Fredoka','Dosis','Trebuchet MS',system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1A1E; --soft:#15272C; --ink:#EAF3EE; --muted:#9BB2AA;
+  --card:#123A31; --card-ink:#D8FFF0; --line:#5FE3B5;
+  --bar:#000; --bar-ink:#9FFCD7;
+  --low:#6FDB9A; --mod:#F2B65A; --high:#FF8A7A;
+  --sea:#0F3550; --sea-ink:#D5EEFF; --chill:#6FB6FF; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0D1A1E; --soft:#15272C; --ink:#EAF3EE; --muted:#9BB2AA;
+  --card:#123A31; --card-ink:#D8FFF0; --line:#5FE3B5;
+  --bar:#000; --bar-ink:#9FFCD7;
+  --low:#6FDB9A; --mod:#F2B65A; --high:#FF8A7A;
+  --sea:#0F3550; --sea-ink:#D5EEFF; --chill:#6FB6FF; color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--display);font-size:17px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.page{max-width:1180px;margin:0 auto;padding-block:0 32px}
+.bar{background:var(--bar);color:var(--bar-ink);border-radius:0 0 14px 14px;padding-block:10px 12px;text-align:center}
+.bar h1{margin:0;font-weight:600;font-size:clamp(22px,4.2vw,40px);letter-spacing:.01em;display:flex;align-items:center;justify-content:center;gap:.3em;flex-wrap:wrap;line-height:1.1}
+.bar h1 b{font-weight:800;font-size:1.3em;letter-spacing:.02em}
+.ball{width:1.2em;height:1.2em;flex:none}
+
+/* Today / Tomorrow switch */
+.daybar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:12px 10px;display:flex;justify-content:center}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;width:min(100%,520px);border:2px solid var(--line);border-radius:999px;padding:3px;background:var(--bg)}
+.seg button{font:inherit;border:0;background:transparent;color:var(--ink);border-radius:999px;min-height:46px;padding:4px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1}
+.seg button .d{font-family:var(--label);font-weight:600;font-size:19px;letter-spacing:.02em}
+.seg button .s{font-size:13px;opacity:.75;font-variant-numeric:tabular-nums}
+.seg button[aria-selected="true"]{background:var(--card);color:var(--card-ink);box-shadow:inset 0 0 0 1.5px var(--line)}
+.seg button:focus-visible{outline:3px solid var(--line);outline-offset:2px}
+@media (max-width:440px){.seg button{padding-inline:4px}.seg button .d{font-size:16px;letter-spacing:0}.seg button .s{font-size:12px}}
+
+/* The pick: echoes the marquee bar */
+.verdict{background:var(--bar);color:var(--bar-ink);border-radius:14px;padding:12px 18px 14px;margin-top:4px;text-align:center}
+.vk{font-size:12.5px;text-transform:uppercase;letter-spacing:.12em;opacity:.8;font-weight:600}
+.vn{font-family:var(--label);font-weight:600;font-size:clamp(22px,4vw,30px);line-height:1.15;margin-top:2px;text-wrap:balance}
+.vr{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:8px}
+.vr span{border:1.5px solid var(--bar-ink);border-radius:999px;padding:1px 10px;font-size:14.5px;font-weight:600}
+.vx{font-size:14px;opacity:.8;margin-top:8px}
+.pick-chip{font-family:var(--label);font-size:13px;font-weight:600;background:var(--bar);color:var(--bar-ink);border-radius:999px;padding:2px 10px;white-space:nowrap}
+
+/* Beach hours strip, 7 AM to 3 PM */
+.hours-wrap{margin-top:22px}
+.hours-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;background:var(--soft);border-radius:10px;padding:8px 2px}
+.hours{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(34px,1fr);min-width:max-content;width:100%}
+.hr{display:flex;flex-direction:column;align-items:center;gap:2px;padding:2px 1px;font-variant-numeric:tabular-nums}
+.hr + .hr{border-left:1px solid color-mix(in srgb, var(--muted) 35%, transparent)}
+.hr .ht{font-size:13px;color:var(--muted);font-weight:600}
+.hr .hi{font-size:20px;line-height:1.1}
+.hr .hT{font-size:17px;font-weight:700}
+.hr .hw{font-size:13.5px;font-weight:600;white-space:nowrap}
+.hr .hw .arr{display:inline-block;margin-right:1px}
+.hr .hw.onshore{color:var(--chill)}
+.hr .hp{font-size:13px;color:var(--muted)}
+.hr .hp.wet{color:var(--chill);font-weight:700}
+.hours-key{font-size:13px;color:var(--muted);text-align:center;margin-top:6px}
+.hours-key b{color:var(--chill)}
+
+.notice{margin-top:6px;background:var(--soft);border:1.5px dashed var(--muted);border-radius:10px;padding:12px 16px;color:var(--ink);font-size:15.5px}
+.notice b{font-weight:700}
+.beach{padding-block:22px 28px;border-bottom:2px dotted var(--muted)}
+.beach:last-of-type{border-bottom:0}
+.beach-head{display:flex;align-items:baseline;gap:6px 16px;flex-wrap:wrap;margin-bottom:12px}
+.beach-head h2{margin:0;font-weight:600;font-size:clamp(30px,4.6vw,48px);line-height:1.05;text-wrap:balance}
+.where{color:var(--muted);font-size:15px}
+.chip{font-size:13.5px;border:1.5px solid var(--muted);color:var(--muted);border-radius:999px;padding:1px 10px}
+.chip.ok{border-color:var(--line);color:var(--ink)}
+.chip a{color:inherit;font-weight:700;text-decoration:underline;text-underline-offset:2px}
+.chip a:hover{text-decoration-thickness:2px}
+.grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr) minmax(0,1fr);gap:22px 26px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr);gap:18px}}
+.now{display:flex;align-items:center;gap:14px;padding-top:24px}
+@media (max-width:900px){.now{padding-top:0}}
+.icon{font-size:clamp(60px,8vw,92px);line-height:1}
+.kicker{font-size:13px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600}
+.temp{font-weight:400;font-size:clamp(70px,9vw,112px);line-height:.9;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.cond{font-size:19px;font-weight:600;margin-top:6px}
+.sub{color:var(--muted);font-size:15px}
+.col{display:flex;flex-direction:column;gap:8px;min-width:0}
+.label{font-family:var(--label);font-weight:600;font-size:23px;margin:0;text-align:center;line-height:1.2}
+.card{background:var(--card);color:var(--card-ink);border:2px solid var(--line);border-radius:10px;padding:12px 18px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;align-items:baseline;font-size:19px;margin:0}
+.kv dt{font-weight:500;opacity:.8}
+.kv dd{margin:0;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+.pill{display:inline-block;border:1.5px solid currentColor;border-radius:999px;padding:0 10px;font-size:15px;font-weight:700;line-height:1.5}
+.pill.low{color:var(--low)} .pill.moderate{color:var(--mod)} .pill.high{color:var(--high)}
+.tides{display:grid;grid-template-columns:auto auto 1fr;gap:2px 14px;font-size:19px;align-items:baseline;font-variant-numeric:tabular-nums}
+.tides .t{font-weight:600}
+.tides .h{text-align:right;opacity:.8;font-size:16px}
+.tides .past{opacity:.45}
+.tides .next{font-weight:700}
+.tag{font-family:var(--label);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;border:1.5px solid currentColor;border-radius:6px;padding:0 5px;margin-left:6px;vertical-align:2px}
+.curve{display:block;width:100%;height:auto;margin-top:8px}
+.col > .label:not(:first-child){margin-top:14px}
+/* Water tile: the one sea-blue surface on the page */
+.water{display:flex;align-items:center;gap:16px;background:var(--sea);color:var(--sea-ink);border:2px solid var(--line);border-radius:10px;padding:12px 18px}
+.water.cold{box-shadow:inset 6px 0 0 var(--chill)}
+.wv{font-weight:500;font-size:clamp(52px,6vw,64px);line-height:.9;font-variant-numeric:tabular-nums;letter-spacing:-.02em;white-space:nowrap}
+.wu{font-size:.45em;font-weight:600;margin-left:2px;vertical-align:.9em}
+.wtext{min-width:0;display:flex;flex-direction:column;gap:2px}
+.wp{font-weight:700;font-size:17px}
+.wc{font-size:15px;line-height:1.3}
+.ws{font-size:13px;opacity:.75}
+/* Bacteria testing line under the water tile */
+.wq{display:flex;align-items:baseline;gap:4px 10px;flex-wrap:wrap;border:1.5px dashed var(--muted);border-radius:10px;padding:8px 14px;font-size:15px}
+.wq .wql{font-family:var(--label);font-weight:600}
+.wq .wqs{color:var(--muted)}
+.wq a{color:var(--ink);font-weight:600;text-underline-offset:2px}
+.wq .links{display:flex;gap:4px 12px;flex-wrap:wrap}
+/* Sun strip: two matched cells */
+.sun{display:grid;grid-template-columns:1fr 1fr;background:var(--soft);border-radius:10px;padding:10px 6px 8px;margin-top:6px}
+.sc{display:flex;align-items:center;justify-content:center;gap:10px;padding-inline:6px}
+.sc + .sc{border-left:1.5px solid var(--muted)}
+.si{font-size:30px;line-height:1}
+.sl,.st{display:block}
+.sl{font-size:12.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600}
+.st{font-size:21px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1}
+.dl{grid-column:1 / -1;text-align:center;font-size:13.5px;color:var(--muted);margin-top:6px}
+.note{font-size:14px;color:var(--muted);text-align:center}
+.outlook{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:22px}
+.day{background:var(--soft);border-radius:10px;padding:9px 12px;min-width:0}
+.day .n{font-weight:700;font-size:15px}
+.day .w{font-size:14.5px;color:var(--muted);line-height:1.3}
+.day .r{display:flex;justify-content:space-between;gap:8px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:3px}
+.err{color:var(--muted);font-style:italic}
+footer{text-align:center;padding-top:22px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.tagline{font-size:21px;font-weight:500}
+.updated{font-size:16px;font-variant-numeric:tabular-nums}
+.fine{font-size:13.5px;color:var(--muted);max-width:70ch}
+.fine a{color:inherit}
+#refresh{font:inherit;font-weight:600;font-size:15px;color:var(--ink);background:transparent;border:2px solid var(--line);border-radius:999px;padding:6px 18px;cursor:pointer}
+#refresh:hover{background:var(--card);color:var(--card-ink)}
+#refresh:focus-visible,a:focus-visible{outline:3px solid var(--line);outline-offset:2px}
+</style>
+
+<div class="page">
+  <header class="bar">
+    <h1>Butler's <b>BEACH</b>
+      <svg class="ball" viewBox="0 0 40 40" aria-hidden="true">
+        <circle cx="20" cy="20" r="18" fill="#fff"/>
+        <path d="M20 20 L20 2 A18 18 0 0 1 35.59 29 Z" fill="#E8463A"/>
+        <path d="M20 20 L35.59 29 A18 18 0 0 1 4.41 29 Z" fill="#2F7DE1"/>
+        <path d="M20 20 L4.41 29 A18 18 0 0 1 20 2 Z" fill="#F7C531"/>
+        <path d="M20 2 L20 20 M35.59 29 L20 20 M4.41 29 L20 20" stroke="#fff" stroke-width="2.4"/>
+        <circle cx="20" cy="20" r="4.2" fill="#fff"/>
+        <circle cx="20" cy="20" r="18" fill="none" stroke="#fff" stroke-opacity=".5"/>
+      </svg>
+      <b>DAY</b> Forecast</h1>
+  </header>
+  <nav class="daybar" aria-label="Choose a day">
+    <div class="seg" role="tablist">
+      <button type="button" role="tab" id="tab-today" aria-selected="true" data-view="today"><span class="d">TODAY</span><span class="s" id="lbl-today"></span></button>
+      <button type="button" role="tab" id="tab-tomorrow" aria-selected="false" data-view="tomorrow"><span class="d">TOMORROW</span><span class="s" id="lbl-tomorrow"></span></button>
+      <button type="button" role="tab" id="tab-saturday" aria-selected="false" data-view="saturday" hidden><span class="d">SATURDAY</span><span class="s" id="lbl-saturday"></span></button>
+    </div>
+  </nav>
+  <div id="notice" class="notice" hidden></div>
+  <section id="verdict" class="verdict" aria-live="polite" hidden></section>
+  <main id="beaches"><p class="note" style="padding:40px 0">Checking the surf zone forecast&#x2026;</p></main>
+  <footer>
+    <div class="tagline" id="tagline"></div>
+    <div class="updated" id="updated"></div>
+    <button id="refresh" type="button">Refresh</button>
+    <p class="fine">Tide and sun times are local to the beaches (Eastern time). Forecasts from the
+      <a href="https://forecast.weather.gov/product.php?site=BOX&issuedby=BOX&product=SRF" target="_blank" rel="noopener">NWS Boston/Norton</a> and
+      <a href="https://forecast.weather.gov/product.php?site=GYX&issuedby=GYX&product=SRF" target="_blank" rel="noopener">NWS Gray</a> Surf Zone Forecasts, with the NWS point forecast when those are out of season.
+      Tide predictions from NOAA CO-OPS (<a href="https://tidesandcurrents.noaa.gov/noaatidepredictions.html?id=8454658" target="_blank" rel="noopener">Narragansett Pier</a>,
+      <a href="https://tidesandcurrents.noaa.gov/noaatidepredictions.html?id=8429489" target="_blank" rel="noopener">Hampton Harbor</a>).</p>
+  </footer>
+</div>
+
+<script>
+/* ---------- Configuration ---------- */
+const BEACHES = [
+  { id:'hampton', name:'Hampton Beach', place:'Hampton, NH', office:'GYX', zone:'NHZ014', srfTide:'Hampton Beach',
+    lat:42.9087, lon:-70.8117, tide:{id:'8429489', name:'Hampton Harbor'}, water:['8423898','8419317'],
+    facing:100, short:'Hampton',
+    quality:[{label:'NH beach advisories', url:'https://des.nh.gov/water/healthy-swimming/healthy-swimming-mapper'},
+             {label:'Hampton testing', url:'https://www.hampton.gov/3520/Beach-water-testing'}] },   // facing = compass direction from the sand out to sea (degrees)
+  { id:'narragansett', name:'Narragansett Town Beach', place:'Narragansett, RI', office:'BOX', zone:'RIZ006', srfTide:'Narragansett Pier',
+    lat:41.4372, lon:-71.4527, tide:{id:'8454658', name:'Narragansett Pier'}, water:['8452660'],
+    facing:120, short:'Narragansett',
+    quality:[{label:'RIDOH beach closures', url:'https://health.ri.gov/beaches'}] },
+];
+const BEACH_HOURS = [7, 15];     // 7 AM through the 3 PM hour
+const NWS = 'https://api.weather.gov';
+const COOPS = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter';
+const TZ = 'America/New_York';
+const FRESH_HOURS = 30;          // older Surf Zone Forecasts count as out of season
+const REFRESH_MIN = 30;
+const TOMORROW_AFTER_HOUR = 17;  // after 5 PM at the beach, open on Tomorrow
+const WEEKDAYS = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+
+/* ---------- Time helpers (everything in beach-local Eastern time) ---------- */
+const nyFmt = new Intl.DateTimeFormat('en-US',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+function nyParts(d){ const o={}; for(const p of nyFmt.formatToParts(d)) o[p.type]=p.value; return {y:o.year,m:o.month,d:o.day,H:o.hour==='24'?'00':o.hour,M:o.minute}; }
+function nyDate(d){ const p=nyParts(d); return `${p.y}-${p.m}-${p.d}`; }
+function nyHM(d){ const p=nyParts(d); return `${p.H}:${p.M}`; }
+function addDays(dateStr,n){ const [y,m,d]=dateStr.split('-').map(Number); return new Date(Date.UTC(y,m-1,d+n)).toISOString().slice(0,10); }
+function weekdayOf(dateStr){ return new Date(dateStr+'T12:00:00Z').getUTCDay(); }
+function onOrAfter(dateStr, wd){ let d=dateStr; for(let i=0;i<7 && weekdayOf(d)!==wd;i++) d=addDays(d,1); return d; }
+function labelDate(dateStr){ const [y,m,d]=dateStr.split('-').map(Number); return new Intl.DateTimeFormat('en-US',{timeZone:'UTC',weekday:'short',month:'short',day:'numeric'}).format(new Date(Date.UTC(y,m-1,d,12))); }
+function fmt12(hhmm){ let [h,m]=hhmm.split(':').map(Number); const ap=h>=12?'PM':'AM'; h=h%12||12; return `${h}:${String(m).padStart(2,'0')} ${ap}`; }
+function to24(h,m,ap){ h=+h%12 + (ap==='PM'?12:0); return `${String(h).padStart(2,'0')}:${m}`; }
+const timeFmt = new Intl.DateTimeFormat('en-US',{timeZone:TZ,hour:'numeric',minute:'2-digit'});
+
+/* Sunrise/sunset (sunrise equation; good to about a minute) */
+function sunTimes(dateStr, lat, lon){
+  const rad=Math.PI/180, [y,m,d]=dateStr.split('-').map(Number);
+  const n = Date.UTC(y,m-1,d,12)/86400000 + 2440587.5 - 2451545.0;
+  const Js = n - lon/360;
+  const M = (357.5291 + 0.98560028*Js) % 360;
+  const C = 1.9148*Math.sin(M*rad) + 0.02*Math.sin(2*M*rad) + 0.0003*Math.sin(3*M*rad);
+  const L = (M + C + 180 + 102.9372) % 360;
+  const Jt = 2451545 + Js + 0.0053*Math.sin(M*rad) - 0.0069*Math.sin(2*L*rad);
+  const dec = Math.asin(Math.sin(L*rad)*Math.sin(23.4397*rad));
+  const cw = (Math.sin(-0.833*rad) - Math.sin(lat*rad)*Math.sin(dec)) / (Math.cos(lat*rad)*Math.cos(dec));
+  const w = Math.acos(Math.max(-1,Math.min(1,cw)))/rad;
+  const toDate = J => new Date((J-2440587.5)*86400000);
+  return { rise: toDate(Jt - w/360), set: toDate(Jt + w/360) };
+}
+
+/* ---------- Network ---------- */
+async function getJSON(url, ms=15000){
+  const c=new AbortController(); const t=setTimeout(()=>c.abort(),ms);
+  try{ const r=await fetch(url,{signal:c.signal}); if(!r.ok) throw new Error(`${r.status} from ${new URL(url).host}`); return await r.json(); }
+  finally{ clearTimeout(t); }
+}
+async function fetchSRF(office){
+  const list = await getJSON(`${NWS}/products/types/SRF/locations/${office}`);
+  const first = (list['@graph']||[])[0]; if(!first) throw new Error('No surf zone forecast listed');
+  const p = await getJSON(first['@id'] || `${NWS}/products/${first.id}`);
+  return { text:p.productText, issued:new Date(p.issuanceTime) };
+}
+async function fetchPoint(b){
+  const pt = await getJSON(`${NWS}/points/${b.lat},${b.lon}`);
+  const [fc,hr] = await Promise.allSettled([getJSON(pt.properties.forecast), getJSON(pt.properties.forecastHourly)]);
+  return { periods: fc.status==='fulfilled'?fc.value.properties.periods:[], hourly: hr.status==='fulfilled'?hr.value.properties.periods:[] };
+}
+async function fetchTides(b){
+  const begin = addDays(nyDate(new Date()),-1).replace(/-/g,'');   // yesterday through next Saturday and a day beyond
+  const j = await getJSON(`${COOPS}?product=predictions&application=butlers_beach_day&begin_date=${begin}&range=216&datum=MLLW&station=${b.tide.id}&time_zone=lst_ldt&units=english&interval=hilo&format=json`);
+  if(!j.predictions) throw new Error(j.error?.message || 'No tide predictions');
+  return j.predictions.map(p=>({date:p.t.slice(0,10), hhmm:p.t.slice(11,16), ft:+p.v, type:p.type==='H'?'High':'Low'}));
+}
+async function fetchWater(b){
+  for(const id of b.water){
+    try{
+      const j = await getJSON(`${COOPS}?product=water_temperature&application=butlers_beach_day&date=latest&station=${id}&time_zone=lst_ldt&units=english&format=json`);
+      const d = j.data && j.data[0];
+      if(d && d.v!=='' && !isNaN(+d.v)) return { f:Math.round(+d.v), at:d.t, station:j.metadata?.name || id };
+    }catch(e){}
+  }
+  return null;
+}
+
+/* ---------- Surf Zone Forecast parser ---------- */
+function expandUGC(str){
+  const zones=[]; let pre='';
+  const add=(a,b)=>{ for(let i=+a;i<=(b?+b:+a);i++) zones.push(pre+String(i).padStart(3,'0')); };
+  for(const tok of str.replace(/\s+/g,'').split('-')){
+    let m;
+    if((m=tok.match(/^([A-Z]{2}[ZC])(\d{3})(?:>(\d{3}))?$/))){ pre=m[1]; add(m[2],m[3]); }
+    else if((m=tok.match(/^(\d{3})(?:>(\d{3}))?$/)) && pre){ add(m[1],m[2]); }
+  }
+  return zones;
+}
+function findSegment(text, zone){
+  for(const seg of text.replace(/\r/g,'').split(/^\$\$\s*$/m)){
+    const lines = seg.split('\n');
+    let i = lines.findIndex(l=>/^[A-Z]{2}[ZC]\d{3}/.test(l)); if(i<0) continue;
+    let ugc = lines[i], guard=0;
+    while(!/-\d{6}-\s*$/.test(ugc) && i+1<lines.length && guard++<4){ i++; ugc += lines[i]; }
+    if(expandUGC(ugc).includes(zone)) return lines.slice(i+1).join('\n');
+  }
+  return null;
+}
+const titleCase = s => s.toLowerCase().replace(/\b[a-z]/g,c=>c.toUpperCase()).replace(/\bOf\b/g,'of');
+function tideEvents(s){
+  const out=[], re=/(High|Low)\s+(-?[\d.]+)\s+feet\s+\(MLLW\)\s+(\d{1,2}):(\d{2})\s+([AP]M)/g; let m;
+  while((m=re.exec(s))) out.push({type:m[1], ft:+m[2], hhmm:to24(m[3],m[4],m[5])});
+  return out;
+}
+function parseSegment(seg){
+  const lines = seg.split('\n'), out={beaches:'',periods:[]};
+  let k=0; const head=[];
+  while(k<lines.length && !/^\.[A-Z]/.test(lines[k])) head.push(lines[k++]);
+  const inc = head.join(' ').replace(/\s+/g,' ').match(/Including the beaches of (.+?)\s+\d{3,4} [AP]M/);
+  out.beaches = inc?inc[1]:'';
+  let cur=null, field=null, station=null, mode=null;
+  for(; k<lines.length; k++){
+    const line = lines[k];
+    if(/^&&/.test(line)) break;
+    let m = line.match(/^\.([A-Z][A-Z0-9 '\/-]*?)\.\.\.(.*)$/);
+    if(m){
+      cur = m[2].trim() ? {name:titleCase(m[1]), text:m[2].trim(), ext:true}
+                        : {name:titleCase(m[1]), fields:{}, tides:{}, ext:false};
+      out.periods.push(cur);   // product order: detailed days first, then the short extended days
+      field=station=mode=null; continue;
+    }
+    if(!cur || !line.trim()) continue;
+    if(cur.ext){ cur.text += ' '+line.trim(); continue; }
+    m = line.match(/^([A-Za-z][A-Za-z ]*?)\*{0,2}\.{3,}(.*)$/);
+    if(m){
+      const key=m[1].trim(), val=m[2].trim();
+      if(key==='Tides'){ mode='tides'; field=null; } else { mode='field'; field=key; cur.fields[key]=val; }
+      continue;
+    }
+    if(mode==='tides'){
+      const st = line.match(/^\s{1,8}(\S.*?)(?:\.{2,}|(?=(?:High|Low)\s+-?\d))(.*)$/);
+      if(st){ station=st[1].trim(); cur.tides[station]=tideEvents(st[2]); }
+      else if(station){ cur.tides[station].push(...tideEvents(line)); }
+      continue;
+    }
+    if(mode==='field' && field){
+      const sub = line.match(/^\s{1,8}(\S.*?)\.{3,}(.*)$/);
+      if(sub){ if(!cur.fields[field]) cur.fields[field]=sub[2].trim(); continue; }   // multi-coast zones: keep the first coast
+      cur.fields[field] += ' '+line.trim();
+    }
+  }
+  return out;
+}
+/* Give each forecast period a calendar date, counting from the issuance date */
+function datePeriods(periods, issued){
+  const base = nyDate(issued); let prev = null;
+  for(const p of periods){
+    const n = p.name.toLowerCase(); p.night = /night/.test(n);
+    const wd = WEEKDAYS.indexOf(n.split(' ')[0]);
+    if(/today|this afternoon|this morning|tonight/.test(n)) p.date = base;
+    else if(wd>=0) p.date = onOrAfter(prev||base, wd);
+    else p.date = prev ? (p.night ? prev : addDays(prev,1)) : base;   // holidays such as "Labor Day"
+    if(!p.night) prev = p.date;
+  }
+  return periods;
+}
+
+/* ---------- Text shaping ---------- */
+const clean = s => (s||'').replace(/\s+/g,' ').replace(/\.\s*$/,'').trim();
+function tempFrom(s){
+  if(!s) return null; let m;
+  if((m=s.match(/(lower|mid|upper)\s+(\d+)s/i))) return +m[2] + ({lower:2,mid:5,upper:8})[m[1].toLowerCase()];
+  if((m=s.match(/\b(\d+)s\b/))) return +m[1]+5;
+  if((m=s.match(/-?\d+/))) return +m[0];
+  return null;
+}
+const DIRS={northeast:'NE',northwest:'NW',southeast:'SE',southwest:'SW',north:'N',south:'S',east:'E',west:'W'};
+function shortWind(s){
+  return clean(s).replace(/\b(northeast|northwest|southeast|southwest|north|south|east|west)\b/gi,w=>DIRS[w.toLowerCase()])
+    .replace(/\s+winds?\b/gi,'').replace(/(\d+) to (\d+)/g,'$1\u2013$2').replace(/\baround (\d)/gi,'~$1');
+}
+function shortSurf(s){ return clean(s).replace(/(\d+) to (\d+)/g,'$1\u2013$2').replace(/\baround\s+/i,'~').replace(/\bfeet\b/,'ft').replace(/\bfoot\b/,'ft'); }
+function firstSentence(s){ return clean((s||'').split(/\.\s/)[0]); }
+function wxIcon(s, night){
+  s=(s||'').toLowerCase();
+  if(/thunder/.test(s)) return '\u26c8\ufe0f';
+  if(/snow|flurr|sleet|freezing/.test(s)) return '\ud83c\udf28\ufe0f';
+  if(/rain|shower|drizzle/.test(s)) return '\ud83c\udf27\ufe0f';
+  if(/partly sunny|mostly cloudy|partly cloudy/.test(s)) return /mostly cloudy/.test(s)?'\ud83c\udf25\ufe0f':'\u26c5';
+  if(/mostly sunny|mostly clear/.test(s)) return night?'\ud83c\udf19':'\ud83c\udf24\ufe0f';
+  if(/sunny|clear/.test(s)) return night?'\ud83c\udf19':'\u2600\ufe0f';
+  if(/cloud|overcast/.test(s)) return '\u2601\ufe0f';
+  if(/fog|haze|mist/.test(s)) return '\ud83c\udf2b\ufe0f';
+  return night?'\ud83c\udf19':'\ud83c\udf24\ufe0f';
+}
+function shortDay(name){
+  if(WEEKDAYS.includes(name.toLowerCase())) return name.slice(0,3);
+  return name.replace(/^Rest of Today$/i,'Today');
+}
+/* Pull the pieces out of an extended-period sentence like "Surf height 3 to 4 feet. Mostly sunny. Highs in the upper 60s. Northeast winds around 10 mph." */
+function parseExtended(text){
+  const surf = (text.match(/Surf height ([^.]+)\./i)||[])[1];
+  const high = (text.match(/Highs? ([^.]+)\./i)||[])[1];
+  const wind = (text.match(/([A-Za-z]+ winds? [^.]+)\./)||[])[1];
+  const sky = text.split(/\.\s+/).filter(x=>x && !/^Surf height|^Highs?\b|winds?\b/i.test(x)).join('. ');
+  return { surf:surf?shortSurf(surf):'', temp:tempFrom(high), tempPhrase:clean(high), wind:wind?shortWind(wind):null, sky:clean(sky) };
+}
+const esc = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+
+/* ---------- Wind as numbers: speed, direction, and how it hits each beach ---------- */
+const DEG16 = {N:0,NNE:22.5,NE:45,ENE:67.5,E:90,ESE:112.5,SE:135,SSE:157.5,S:180,SSW:202.5,SW:225,WSW:247.5,W:270,WNW:292.5,NW:315,NNW:337.5};
+function mphFrom(s){ if(!s) return null; if(/light|calm/i.test(s) && !/\d/.test(s)) return 3; const n=(String(s).match(/\d+/g)||[]).map(Number); return n.length?Math.max(...n):null; }
+function dirFromText(s){   // "Northwest winds 5 to 10 mph, becoming southwest..." -> 315 (the first direction named)
+  const m = (s||'').match(/\b(northeast|northwest|southeast|southwest|north|south|east|west)\b/i);
+  return m ? DEG16[DIRS[m[1].toLowerCase()]] : null;
+}
+function breezeFor(deg, facing, mph){
+  if(deg==null) return null;
+  if(mph!=null && mph<5) return 'light';
+  const diff = Math.abs(((deg - facing) % 360 + 540) % 360 - 180);   // 0 = blowing straight in from the sea
+  return diff<=60 ? 'onshore' : diff>=120 ? 'offshore' : 'side-shore';
+}
+const BREEZE_TEXT = { onshore:'Onshore (cooler)', offshore:'Offshore (warmer)', 'side-shore':'Side-shore', light:'Light' };
+const hourLabel = H => H===12 ? '12p' : H>12 ? `${H-12}p` : `${H}a`;
+
+/* ---------- Build a view model for one beach and one day ---------- */
+function humidityFor(hourly, day, isToday){
+  if(!hourly?.length) return null;
+  if(isToday) return hourly[0]?.relativeHumidity?.value ?? null;
+  const same = hourly.filter(h=>nyDate(new Date(h.startTime))===day);
+  const mid = same.find(h=>nyHM(new Date(h.startTime)).startsWith('13')) || same[Math.floor(same.length/2)];
+  return mid?.relativeHumidity?.value ?? null;
+}
+function buildModel(b, r, base, offset){
+  const now = new Date();
+  const day = addDays(base, offset), isToday = offset===0;
+  const vm = { b, day, isToday, live:!r.sample, outlook:[], tides:[], tideSource:'', errors:[] };
+
+  // Surf Zone Forecast for this beach's zone
+  let seg=null;
+  if(r.srf){ const t = findSegment(r.srf.text, b.zone); if(t) seg = parseSegment(t); }
+  vm.srfIssued = r.srf?.issued;
+  vm.srfFresh = !!(seg && seg.periods.length && (r.sample || (now - r.srf.issued)/3.6e6 <= FRESH_HOURS));
+  const periods = vm.srfFresh ? datePeriods(seg.periods, r.srf.issued) : [];
+  const sp = periods.find(p=>!p.night && p.date===day);
+
+  const hourly = r.point?.hourly || [];
+  const pts = r.point?.periods || [];
+  vm.nowTemp = isToday ? (hourly[0]?.temperature ?? null) : null;
+  vm.humidity = humidityFor(hourly, day, isToday);
+
+  if(sp && !sp.ext){
+    const f = sp.fields;
+    vm.mode='srf'; vm.periodName = sp.name;
+    vm.cond = clean(f['Weather']); vm.icon = wxIcon(firstSentence(f['Weather']));
+    vm.temp = tempFrom(f['High Temperature']); vm.tempLabel = 'High'; vm.tempPhrase = clean(f['High Temperature']);
+    vm.wind = f['Winds'] ? shortWind(f['Winds']) : null;
+    vm.windMph = mphFrom(f['Winds']); vm.windDeg = dirFromText(f['Winds']);
+    vm.surf = f['Surf Height'] ? shortSurf(f['Surf Height']) : null;
+    vm.rip = f['Rip Current Risk'] ? clean(f['Rip Current Risk']) : null;
+    vm.uv = f['UV Index'] && !/unavailable/i.test(f['UV Index']) ? clean(f['UV Index']) : null;
+    vm.storms = f['Thunderstorm Potential'] ? clean(f['Thunderstorm Potential']) : null;
+    vm.srfTides = (sp.tides[b.srfTide] || Object.values(sp.tides)[0] || []).map(e=>({...e,date:day}));
+  } else if(sp && sp.ext){
+    const x = parseExtended(sp.text);
+    vm.mode='srf'; vm.periodName = sp.name;
+    vm.cond = x.sky; vm.icon = wxIcon(x.sky); vm.temp = x.temp; vm.tempLabel='High'; vm.tempPhrase = x.tempPhrase;
+    vm.wind = x.wind; vm.surf = x.surf || null;
+    const raw = (sp.text.match(/([A-Za-z]+ winds? [^.]+)\./)||[])[1];
+    vm.windMph = mphFrom(raw); vm.windDeg = dirFromText(raw);
+  } else {
+    // Point forecast: the current period for today, the daytime period for later days
+    const dayP = isToday ? pts[0] : pts.find(p=>p.isDaytime && nyDate(new Date(p.startTime))===day);
+    const nightP = pts.find(p=>!p.isDaytime && nyDate(new Date(p.startTime))===day);
+    if(dayP){
+      vm.mode='point'; vm.periodName = dayP.name;
+      vm.cond = dayP.shortForecast;
+      const h0 = isToday ? hourly[0] : null;
+      vm.icon = wxIcon(h0?.shortForecast || dayP.shortForecast, !(h0?.isDaytime ?? dayP.isDaytime));
+      if(isToday && vm.nowTemp!=null){ vm.temp = vm.nowTemp; vm.tempLabel='Right now'; vm.tempPhrase = `${dayP.name}: ${dayP.isDaytime?'high':'low'} ${dayP.temperature}\u00b0`; vm.nowTemp=null; }
+      else { vm.temp = dayP.temperature; vm.tempLabel = dayP.isDaytime?'High':'Low'; vm.tempPhrase = nightP && nightP!==dayP ? `${nightP.name}: low ${nightP.temperature}\u00b0` : ''; }
+      const w = h0 || dayP;
+      vm.wind = `${w.windDirection} ${String(w.windSpeed).replace(' to ','\u2013')}`;
+      vm.windMph = mphFrom(w.windSpeed); vm.windDeg = DEG16[w.windDirection] ?? null;
+    } else vm.errors.push(isToday ? 'Weather is unavailable right now.' : 'The forecast for this day is unavailable right now.');
+  }
+
+  // Daytime numbers for comparing the beaches
+  const dayPt = pts.find(p=>p.isDaytime && nyDate(new Date(p.startTime))===day);
+  vm.high = vm.mode==='srf' ? vm.temp : (dayPt?.temperature ?? null);
+  vm.pop = dayPt?.probabilityOfPrecipitation?.value ?? null;
+
+  // Beach hours, 7 AM through 3 PM, from the hourly forecast
+  vm.hours = hourly.map(h=>{
+    const d = new Date(h.startTime), H = +nyHM(d).slice(0,2);
+    if(nyDate(d)!==day || H<BEACH_HOURS[0] || H>BEACH_HOURS[1]) return null;
+    const deg = DEG16[h.windDirection] ?? null, mph = mphFrom(h.windSpeed);
+    return { label:hourLabel(H), icon:wxIcon(h.shortForecast, !h.isDaytime), temp:h.temperature, mph, dir:h.windDirection,
+             deg, breeze:breezeFor(deg, b.facing, mph), pop:h.probabilityOfPrecipitation?.value ?? 0, short:h.shortForecast };
+  }).filter(Boolean);
+  if(vm.hours.length){
+    const hs = vm.hours;
+    vm.stats = { maxTemp:Math.max(...hs.map(h=>h.temp)), avgWind:Math.round(hs.reduce((a,h)=>a+(h.mph||0),0)/hs.length),
+                 maxPop:Math.max(...hs.map(h=>h.pop)), thunder:hs.some(h=>/thunder/i.test(h.short)) };
+    const counts = {}; for(const h of hs) if(h.breeze) counts[h.breeze]=(counts[h.breeze]||0)+1;
+    vm.breeze = Object.entries(counts).sort((a,c)=>c[1]-a[1])[0]?.[0] || null;
+  } else {
+    vm.breeze = breezeFor(vm.windDeg, b.facing, vm.windMph);
+  }
+  vm.rain = vm.stats ? vm.stats.maxPop : vm.pop;
+  vm.thunder = /thunder/i.test(vm.cond||'') || !!(vm.storms && !/none/i.test(vm.storms)) || !!vm.stats?.thunder;
+
+  // Water temperature: SRF wording when given, NOAA sensor otherwise (water barely changes overnight)
+  const wtField = periods.find(p=>!p.ext && p.fields['Water Temperature'])?.fields['Water Temperature'];
+  if(wtField){
+    const first = firstSentence(wtField), deg = first.match(/(\d+) degrees/);
+    vm.water = deg ? { value:+deg[1], approx:false, phrase:'' }
+                   : { value:tempFrom(first), approx:true, phrase:first.replace(/^./,c=>c.toUpperCase()) };
+    vm.water.source = 'NWS surf zone forecast';
+    vm.water.cold = /USCG|below 60/i.test(wtField) || (vm.water.value!=null && vm.water.value<60);
+  } else if(r.water){
+    vm.water = { value:r.water.f, approx:false, phrase:'', source:`NOAA sensor \u00b7 ${r.water.station}`, cold:r.water.f<60 };
+  }
+  if(vm.water && vm.water.value==null) vm.water = null;
+
+  // Tides: NOAA predictions cover whole days; the SRF only lists daytime tides
+  if(r.tides?.length){ vm.tides = r.tides; vm.tideSource = `NOAA \u00b7 ${b.tide.name}`; }
+  else if(vm.srfTides?.length){ vm.tides = vm.srfTides; vm.tideSource = `NWS surf zone forecast \u00b7 ${b.srfTide} (daytime tides only)`; }
+
+  // Outlook: the days after the one being shown
+  if(vm.srfFresh){
+    for(const q of periods.filter(p=>!p.night && p.date>day).slice(0,4)){
+      if(q.ext){ const x=parseExtended(q.text); vm.outlook.push({name:shortDay(q.name), sky:firstSentence(x.sky), temp:x.temp, surf:x.surf}); }
+      else vm.outlook.push({name:shortDay(q.name), sky:firstSentence(q.fields['Weather']), temp:tempFrom(q.fields['High Temperature']), surf:q.fields['Surf Height']?shortSurf(q.fields['Surf Height']):''});
+    }
+  } else {
+    for(const q of pts.filter(p=>p.isDaytime && nyDate(new Date(p.startTime))>day).slice(0,4))
+      vm.outlook.push({name:shortDay(q.name), sky:q.shortForecast, temp:q.temperature, surf:''});
+  }
+
+  const sun = sunTimes(day, b.lat, b.lon);
+  vm.rise = timeFmt.format(sun.rise); vm.set = timeFmt.format(sun.set);
+  const mins = Math.round((sun.set - sun.rise)/60000);
+  vm.daylight = `${Math.floor(mins/60)}h ${mins%60}m of daylight`;
+  return vm;
+}
+
+/* ---------- Rendering ---------- */
+function tideCurve(vm){
+  const day = vm.day;
+  const toMin = e => { const diff = Math.round((Date.parse(e.date)-Date.parse(day))/86400000); const [h,m]=e.hhmm.split(':').map(Number); return diff*1440+h*60+m; };
+  const pts = vm.tides.map(e=>({x:toMin(e), y:e.ft})).sort((a,b)=>a.x-b.x);
+  if(!(pts.length>=3 && pts[0].x<=0 && pts[pts.length-1].x>=1440)) return '';
+  const W=300,H=74,padT=8,padB=16;
+  const near = pts.filter(p=>p.x>=-400 && p.x<=1840);
+  const lo=Math.min(...near.map(p=>p.y)), hi=Math.max(...near.map(p=>p.y));
+  const sx = x => x/1440*W, sy = y => padT + (hi-y)/(hi-lo||1)*(H-padT-padB);
+  const height = x => { for(let i=0;i<pts.length-1;i++){ const a=pts[i],c=pts[i+1]; if(x>=a.x&&x<=c.x){ const f=(x-a.x)/(c.x-a.x); return a.y+(c.y-a.y)*(1-Math.cos(Math.PI*f))/2; } } return lo; };
+  let d=''; for(let x=0;x<=1440;x+=15){ d += (d?'L':'M')+sx(x).toFixed(1)+' '+sy(height(x)).toFixed(1); }
+  const area = `${d}L${W} ${H-padB}L0 ${H-padB}Z`;
+  let marks=''; for(const p of pts) if(p.x>=0&&p.x<=1440) marks += `<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="2.6" fill="var(--card-ink)"/>`;
+  let nowMark='';
+  if(vm.live && vm.isToday){ const [h,m]=nyHM(new Date()).split(':').map(Number), x=h*60+m, y=height(x);
+    nowMark = `<line x1="${sx(x)}" x2="${sx(x)}" y1="${padT-4}" y2="${H-padB}" stroke="var(--card-ink)" stroke-dasharray="2 3" stroke-opacity=".6"/><circle cx="${sx(x)}" cy="${sy(y)}" r="4" fill="var(--card)" stroke="var(--card-ink)" stroke-width="2"/>`; }
+  const ticks=[[0,'12a'],[360,'6a'],[720,'12p'],[1080,'6p'],[1440,'12a']].map(([x,l],i,a)=>`<text x="${sx(x)}" y="${H-3}" font-size="9.5" fill="var(--card-ink)" fill-opacity=".7" text-anchor="${i===0?'start':i===a.length-1?'end':'middle'}" font-family="Dosis, sans-serif">${l}</text>`).join('');
+  return `<svg class="curve" viewBox="0 0 ${W} ${H}" role="img" aria-label="Tide height through the day">
+    <path d="${area}" fill="var(--card-ink)" fill-opacity=".1"/><path d="${d}" fill="none" stroke="var(--card-ink)" stroke-width="1.8"/>${marks}${nowMark}${ticks}</svg>`;
+}
+
+function renderTides(vm){
+  const list = vm.tides.filter(e=>e.date===vm.day);
+  if(!list.length) return `<div class="card"><span class="err">Tide times are unavailable right now.</span></div>`;
+  const track = vm.live && vm.isToday;
+  const nowStr = track ? `${nyDate(new Date())} ${nyHM(new Date())}` : '';
+  const upcoming = track ? vm.tides.find(e=>`${e.date} ${e.hhmm}` > nowStr) : null;
+  const rows = list.map(e=>{
+    const past = track && `${e.date} ${e.hhmm}` <= nowStr;
+    const isNext = upcoming && e===upcoming;
+    const cls = past?'past':isNext?'next':'';
+    return `<span class="${cls}">${e.type==='High'?'Hi Tide':'Lo Tide'}</span><span class="t ${cls}">${fmt12(e.hhmm)}${isNext?'<span class="tag">next</span>':''}</span><span class="h ${cls}">${e.ft.toFixed(1)} ft</span>`;
+  }).join('');
+  const nextLine = upcoming && upcoming.date!==vm.day
+    ? `<div class="note" style="color:inherit;opacity:.8">Next: ${upcoming.type.toLowerCase()} tide ${fmt12(upcoming.hhmm)} tomorrow</div>` : '';
+  return `<div class="card"><div class="tides">${rows}</div>${nextLine}${tideCurve(vm)}</div><div class="note">${esc(vm.tideSource)}</div>`;
+}
+
+function ripPill(r){ const k=(r||'').toLowerCase().split(/\W/)[0]; return `<span class="pill ${esc(k)}">${esc(r)}</span>`; }
+function fmtIssued(d){ return new Intl.DateTimeFormat('en-US',{timeZone:TZ,weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(d); }
+function fmtShortDate(d){ return new Intl.DateTimeFormat('en-US',{timeZone:TZ,month:'short',day:'numeric'}).format(d); }
+
+function renderBeach(vm){
+  const b = vm.b;
+  let chip;
+  if(vm.srfFresh){
+    const url = `https://forecast.weather.gov/product.php?site=${b.office}&issuedby=${b.office}&product=SRF&format=CI&version=1&glossary=0`;
+    chip = `<span class="chip ok">Surf Zone Forecast \u00b7 issued <a href="${url}" target="_blank" rel="noopener" title="Open the full NWS Surf Zone Forecast">${esc(fmtIssued(vm.srfIssued))} \u2197</a></span>`;
+  }
+  else if(vm.srfIssued) chip = `<span class="chip">Surf Zone Forecast out of season (last ${esc(fmtShortDate(vm.srfIssued))}) \u00b7 NWS point forecast</span>`;
+  else chip = `<span class="chip">NWS point forecast</span>`;
+
+  const nowBlock = vm.temp!=null ? `
+    <div class="now">
+      <div class="icon" aria-hidden="true">${vm.icon}</div>
+      <div>
+        <div class="kicker">${esc(vm.tempLabel)} \u00b7 ${esc(vm.periodName||'')}</div>
+        <div class="temp">${vm.temp}\u00b0</div>
+        <div class="cond">${esc(vm.cond||'')}</div>
+        <div class="sub">${esc(vm.tempPhrase||'')}${vm.nowTemp!=null ? ` \u00b7 Now ${vm.nowTemp}\u00b0` : ''}</div>
+      </div>
+    </div>` : `<div class="now"><span class="err">${esc(vm.errors.join(' ')||'Weather is unavailable right now.')}</span></div>`;
+
+  const rows = [];
+  if(vm.wind) rows.push(['Wind', esc(vm.wind)]);
+  if(vm.breeze) rows.push(['Breeze', esc(BREEZE_TEXT[vm.breeze])]);
+  if(vm.rain!=null) rows.push(['Rain chance', `${vm.rain}%`]);
+  if(vm.humidity!=null) rows.push(['Humidity', `${Math.round(vm.humidity)}%`]);
+  if(vm.mode==='srf'){
+    rows.push(['Surf', esc(vm.surf||'\u2014')]);
+    if(vm.rip) rows.push(['Rip current risk', ripPill(vm.rip)]);
+    if(vm.uv) rows.push(['UV index', esc(vm.uv)]);
+    if(vm.storms && !/^none$/i.test(vm.storms)) rows.push(['Thunder', esc(vm.storms)]);
+  }
+  const surfNote = vm.mode==='srf' ? (vm.rip ? '' : '<div class="note">Rip current risk is only forecast for the first two days.</div>')
+                 : vm.srfFresh ? '<div class="note">The surf forecast doesn\u2019t reach this day yet. Surf height and rip current risk appear a few days out.</div>'
+                 : '<div class="note">Surf height and rip current risk return when NWS resumes the seasonal Surf Zone Forecast.</div>';
+
+  const hoursBlock = vm.hours.length ? `<div class="hours-wrap">
+      <h3 class="label">\ud83d\udd56 7 AM \u2013 3 PM</h3>
+      <div class="hours-scroll" style="margin-top:8px"><div class="hours" role="list">${vm.hours.map(h=>`
+        <div class="hr" role="listitem" aria-label="${esc(`${h.label}: ${h.temp}\u00b0, ${h.short}, wind ${h.dir} ${h.mph} mph${h.breeze==='onshore'?' onshore':''}, rain ${h.pop}%`)}">
+          <span class="ht">${h.label}</span><span class="hi" aria-hidden="true">${h.icon}</span><span class="hT">${h.temp}\u00b0</span>
+          <span class="hw ${h.breeze==='onshore'?'onshore':''}"><span class="arr" style="transform:rotate(${h.deg??0}deg)" aria-hidden="true">${h.deg==null?'':'\u2193'}</span>${h.mph??''}</span>
+          <span class="hp ${h.pop>=40?'wet':''}">${h.pop}%</span>
+        </div>`).join('')}</div></div>
+      <div class="hours-key">Wind in mph, arrow shows where it blows \u00b7 <b>blue</b> = onshore breeze \u00b7 bottom row = rain chance</div>
+    </div>`
+    : (vm.live && vm.isToday ? `<div class="hours-wrap"><h3 class="label">\ud83d\udd56 7 AM \u2013 3 PM</h3><div class="note">Beach hours are over for today. Check Tomorrow.</div></div>` : '');
+  const condCard = rows.length ? `<div class="card"><dl class="kv">${rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></div>${surfNote}`
+                               : `<div class="card"><span class="err">No wind or surf details for this day.</span></div>`;
+
+  const w = vm.water;
+  const water = w ? `<h3 class="label">\ud83c\udf21\ufe0f Water</h3>
+    <div class="water${w.cold?' cold':''}">
+      <div class="wv">${w.approx?'~':''}${w.value}\u00b0<span class="wu">F</span></div>
+      <div class="wtext">
+        ${w.phrase ? `<div class="wp">${esc(w.phrase)}</div>` : ''}
+        ${w.cold ? `<div class="wc">Cold water: below 60\u00b0F, shock and fast loss of strength are a risk.</div>` : (w.value>=68 ? `<div class="wc">Comfortable for a swim.</div>` : `<div class="wc">Brisk. A wetsuit helps for longer swims.</div>`)}
+        <div class="ws">${esc(w.source)}${vm.isToday?'':' \u00b7 latest reading'}</div>
+      </div>
+    </div>` : '';
+  const sea = testingSeason(vm.day);
+  const quality = `<div class="wq"><span class="wql">\ud83e\udda0 Bacteria</span>${sea.inSeason
+      ? `<span class="wqs">Tested in season. Check today\u2019s status:</span><span class="links">${b.quality.map(q=>`<a href="${q.url}" target="_blank" rel="noopener">${esc(q.label)} \u2197</a>`).join('')}</span>`
+      : `<span class="wqs">${esc(sea.note)}</span>`}</div>`;
+  const sun = `<div class="sun">
+      <div class="sc"><span class="si" aria-hidden="true">\ud83c\udf05</span><span><span class="sl">Sunrise</span><span class="st">${esc(vm.rise)}</span></span></div>
+      <div class="sc"><span class="si" aria-hidden="true">\ud83c\udf07</span><span><span class="sl">Sunset</span><span class="st">${esc(vm.set)}</span></span></div>
+      <div class="dl">${esc(vm.daylight)}</div>
+    </div>`;
+
+  const outlook = vm.outlook.length ? `<div class="outlook">${vm.outlook.map(o=>`
+      <div class="day"><div class="n">${esc(o.name)}</div>
+        <div class="w">${wxIcon(o.sky)} ${esc(o.sky||'')}</div>
+        <div class="r"><span>${o.temp!=null?o.temp+'\u00b0':''}</span><span>${o.surf?esc(o.surf)+' surf':''}</span></div></div>`).join('')}</div>` : '';
+
+  return `<section class="beach" aria-labelledby="h-${b.id}">
+    <div class="beach-head"><h2 id="h-${b.id}">${esc(b.name)}</h2>${vm.isPick?'<span class="pick-chip">\ud83c\udfc6 Pick</span>':''}<span class="where">${esc(b.place)}</span>${chip}</div>
+    <div class="grid">
+      ${nowBlock}
+      <div class="col"><h3 class="label">\ud83d\udca8 Wind &amp; Surf</h3>${condCard}${water}${quality}</div>
+      <div class="col"><h3 class="label">\ud83c\udf0a Tides</h3>${renderTides(vm)}${sun}</div>
+    </div>
+    ${hoursBlock}
+    ${outlook}
+  </section>`;
+}
+
+/* State bacteria testing runs Memorial Day (last Monday in May) through Labor Day (first Monday in September) */
+function testingSeason(dateStr){
+  const y = +dateStr.slice(0,4);
+  const lastMonMay = y => { let d=`${y}-05-31`; while(weekdayOf(d)!==1) d=addDays(d,-1); return d; };
+  const firstMonSep = y => { let d=`${y}-09-01`; while(weekdayOf(d)!==1) d=addDays(d,1); return d; };
+  const start = lastMonMay(y), end = firstMonSep(y);
+  if(dateStr>=start && dateStr<=end) return { inSeason:true };
+  const next = dateStr<start ? start : lastMonMay(y+1);
+  return { inSeason:false, note:`Not tested until Memorial Day (${labelDate(next).replace(/^\w+, /,'')}).` };
+}
+
+/* ---------- The pick: score each beach for the chosen day and explain the difference ---------- */
+function skyScore(s){
+  s=(s||'').toLowerCase();
+  if(/thunder|rain|shower|drizzle/.test(s)) return -4;
+  if(/mostly sunny|mostly clear/.test(s)) return 4;
+  if(/sunny|clear/.test(s)) return 5;
+  if(/partly/.test(s)) return 2;
+  return 0;
+}
+function scoreBeach(vm){
+  const high = vm.stats?.maxTemp ?? vm.high;
+  if(high==null) return null;
+  const wind = vm.stats?.avgWind ?? vm.windMph ?? 8;
+  const rain = vm.rain ?? 0;
+  const ripK = (vm.rip||'').toLowerCase().split(/\W/)[0];
+  const f = {
+    temp: Math.min(high,85) - Math.max(0,high-88)*2,
+    wind: -Math.max(0, wind-8),
+    rain: -rain*0.2,
+    thunder: vm.thunder ? -15 : 0,
+    rip: ({moderate:-5, high:-15})[ripK] || 0,
+    water: vm.water ? (vm.water.value-60)*0.4 : 0,
+    breeze: vm.breeze==='onshore' && wind>=8 ? -3 : vm.breeze==='offshore' ? 2 : 0,
+    sky: skyScore(vm.cond),
+  };
+  return { total:Object.values(f).reduce((a,c)=>a+c,0), f, high, wind, rain, ripK };
+}
+function verdict(models){
+  const scored = models.map(m=>({m, s:scoreBeach(m)})).filter(x=>x.s);
+  if(scored.length<2) return null;
+  scored.sort((a,c)=>c.s.total-a.s.total);
+  const [W,L] = scored, w=W.s, l=L.s;
+  const reasons = [];
+  const add = (gain, text) => reasons.push({gain, text});
+  if(w.high-l.high>=2) add(w.f.temp-l.f.temp, `${w.high-l.high}\u00b0 warmer`);
+  if(l.wind-w.wind>=3) add(w.f.wind-l.f.wind, `${l.wind-w.wind} mph less wind`);
+  if(l.rain-w.rain>=15) add(w.f.rain-l.f.rain, `${l.rain-w.rain}% lower rain chance`);
+  if(!W.m.thunder && L.m.thunder) add(15, 'no thunderstorms');
+  if(w.f.rip>l.f.rip) add(w.f.rip-l.f.rip, `${w.ripK} rip current risk (${L.m.b.short}: ${l.ripK})`);
+  if(W.m.water && L.m.water && W.m.water.value-L.m.water.value>=3) add(w.f.water-l.f.water, `water ${W.m.water.value-L.m.water.value}\u00b0 warmer`);
+  if(w.f.breeze>l.f.breeze) add(w.f.breeze-l.f.breeze, W.m.breeze==='offshore' ? 'offshore breeze' : `no onshore breeze`);
+  if(w.f.sky-l.f.sky>=2) add(w.f.sky-l.f.sky, 'sunnier');
+  reasons.sort((a,c)=>c.gain-a.gain);
+  const gap = w.total - l.total;
+  const rough = (w.high<60) || (w.rain>=60) || W.m.thunder;
+  return { winner:W.m, loser:L.m, tossUp: gap<3, rough, reasons:reasons.slice(0,3).map(r=>r.text) };
+}
+function renderVerdict(v, dayName, dateLabel){
+  const el = document.getElementById('verdict');
+  if(!v){ el.hidden = true; return; }
+  const kicker = `Pick for ${dayName}${dateLabel?` \u00b7 ${dateLabel}`:''}`;
+  let name, chips, extra='';
+  if(v.tossUp){
+    name = 'Toss-up: both beaches look about the same';
+    chips = [`${v.winner.b.short} ${v.winner.high ?? v.winner.temp}\u00b0`, `${v.loser.b.short} ${v.loser.high ?? v.loser.temp}\u00b0`];
+    extra = `Slight edge: ${esc(v.winner.b.name)}${v.reasons[0]?` (${esc(v.reasons[0])})`:''}`;
+  } else {
+    name = `\ud83c\udfc6 ${v.winner.b.name}`;
+    chips = v.reasons.length ? v.reasons : ['Better overall conditions'];
+  }
+  if(v.rough) extra = (extra?extra+' \u00b7 ':'') + 'Not a great beach day at either one.';
+  el.innerHTML = `<div class="vk">${esc(kicker)}</div><div class="vn">${esc(name)}</div>
+    <div class="vr">${chips.map(c=>`<span>${esc(c)}</span>`).join('')}</div>${extra?`<div class="vx">${extra}</div>`:''}`;
+  el.hidden = false;
+}
+
+function tagline(models, dayName){
+  const ok = models.filter(m=>m.temp!=null);
+  if(!ok.length) return 'The ocean is still there. We just can\u2019t see it right now.';
+  const any = re => ok.some(m=>re.test(m.cond||''));
+  const best = Math.max(...ok.map(m=>m.high ?? m.temp));
+  const when = dayName==='Today' ? '' : `${dayName}: `;
+  if(any(/thunder/i)) return when+'Thunder on the radar. Hit the arcade instead.';
+  if(any(/rain|shower/i) && !any(/sunny|clear/i)) return when+'Maybe a boardwalk fries kind of day.';
+  if(best < 55) return when+'Sweatshirt weather on the sand.';
+  if(any(/sunny|clear/i) && best >= 72) return dayName==='Today' ? 'Did someone call for sunshine?' : `${dayName}: sunshine is on the way.`;
+  if(any(/sunny|clear/i)) return when+'Sunny, with a side of breeze.';
+  return when+'Good day for a walk on the beach.';
+}
+
+/* ---------- Sample data for when the live APIs can't be reached (e.g. inside a sandboxed preview) ---------- */
+const SAMPLE = {
+  BOX: { issued:'2026-09-04T08:09:00Z', text:`FZUS51 KBOX 040809
+SRFBOX
+
+Surf Zone Forecast
+National Weather Service Boston/Norton MA
+409 AM EDT Fri Sep 4 2026
+
+RIZ006-042200-
+Washington RI-
+Including the beaches of Narragansett, Charlestown, and Westerly
+409 AM EDT Fri Sep 4 2026
+
+.TODAY...
+Rip Current Risk*...........Low.
+Surf Height.................Around 3 feet.
+Thunderstorm Potential**....None.
+UV Index**..................High.
+Water Temperature...........In the lower 70s.
+Weather.....................Partly sunny until 12 PM, then sunny.
+                            Patchy fog.
+High Temperature............Around 80.
+Winds.......................Northwest winds 5 to 10 mph.
+Tides...
+   Watch Hill Point.........Low 0.3 feet (MLLW) 07:52 AM EDT.
+                            High 2.9 feet (MLLW) 02:47 PM EDT.
+   Point Judith (Harbor)....Low 0.3 feet (MLLW) 06:58 AM EDT.
+                            High 3.5 feet (MLLW) 02:10 PM EDT.
+   Narragansett Pier........Low 0.4 feet (MLLW) 06:47 AM EDT.
+                            High 3.6 feet (MLLW) 01:55 PM EDT.
+
+.SATURDAY...
+Rip Current Risk*...........Low.
+Surf Height.................2 to 3 feet.
+Thunderstorm Potential**....None.
+Weather.....................Sunny until 1 PM, then partly sunny.
+High Temperature............In the mid 70s.
+Winds.......................North winds 5 to 10 mph.
+Tides...
+   Narragansett Pier........Low 0.5 feet (MLLW) 07:59 AM EDT.
+                            High 3.5 feet (MLLW) 03:00 PM EDT.
+
+.SUNDAY...Surf height 3 to 4 feet. Mostly sunny. Highs in the upper
+60s. Northeast winds around 10 mph.
+.LABOR DAY...Surf height 2 to 4 feet. Sunny. Highs in the lower 70s.
+Northwest winds around 5 mph.
+.TUESDAY...Surf height 2 to 3 feet. Sunny. Highs in the mid 70s. West
+winds around 10 mph.
+
+&&
+$$
+` },
+  GYX: { issued:'2026-10-12T18:41:00Z', text:`FZUS51 KGYX 121841
+SRFGYX
+
+Surf Zone Forecast for Maine
+National Weather Service Gray ME
+241 PM EDT Mon Oct 12 2026
+
+.For the ocean beaches of Maine and New Hampshire...
+
+NHZ014-122000-
+Coastal Rockingham-
+Including the beaches of Portsmouth and Hampton
+241 PM EDT Mon Oct 12 2026
+
+.REST OF TODAY...
+Weather.....................Sunny.
+UV Index....................UVI Unavailable.
+Thunderstorm Potential......None.
+High Temperature............In the upper 60s.
+Winds.......................West winds around 5 mph.
+Surf Height.................Around 2 feet.
+Water Temperature...........58 degrees. According to the USCG, when
+                            the water temperature is below 60
+                            degrees, the average submerged person
+                            could lose dexterity within minutes.
+Rip Current Risk*...........Low.
+Tides...
+   Hampton Beach............High 9.3 feet (MLLW) 01:00 PM EDT.
+
+.TUESDAY...
+Weather.....................Cloudy. Rain.
+Thunderstorm Potential......None.
+High Temperature............In the upper 50s.
+Winds.......................East winds around 10 mph.
+Surf Height.................3 to 4 feet.
+Rip Current Risk*...........Low.
+Tides...
+   Hampton Beach............Low 0.7 feet (MLLW) 07:46 AM EDT.
+                            High 9.1 feet (MLLW) 01:38 PM EDT.
+
+.WEDNESDAY...Surf height around 4 feet. Mostly sunny. Warmer. Highs
+in the upper 60s. West winds around 5 mph.
+.THURSDAY...Surf height around 2 feet. Sunny. Highs around 60.
+Northwest winds around 10 mph.
+.FRIDAY...Surf height around 3 feet. Cloudy, showers. Highs around
+60. South winds around 10 mph.
+
+&&
+$$
+` }
+};
+
+/* ---------- State, loading, and the day switch ---------- */
+const state = { view:'today', results:null, sample:false };
+const VIEWS = ['today','tomorrow','saturday'];
+const VIEW_NAME = { today:'Today', tomorrow:'Tomorrow', saturday:'Saturday' };
+function satOffset(){ return (6 - weekdayOf(nyDate(new Date())) + 7) % 7; }   // 0 on Saturday, 1 on Friday
+function satAvailable(){ return !state.sample && satOffset() >= 2; }           // Fri/Sat already covered by Today/Tomorrow
+function offsetFor(view){ return view==='today' ? 0 : view==='tomorrow' ? 1 : satOffset(); }
+function normalizeView(v){
+  if(!VIEWS.includes(v)) return 'today';
+  if(v==='saturday' && !satAvailable()) return satOffset()===1 && !state.sample ? 'tomorrow' : 'today';
+  return v;
+}
+function initialView(){
+  const h = (location.hash||'').replace('#','');
+  if(VIEWS.includes(h)) return h;
+  return +nyHM(new Date()).slice(0,2) >= TOMORROW_AFTER_HOUR ? 'tomorrow' : 'today';
+}
+function syncTabs(){
+  document.getElementById('tab-saturday').hidden = !satAvailable();
+  for(const btn of document.querySelectorAll('.seg button')) btn.setAttribute('aria-selected', String(btn.dataset.view===state.view));
+}
+function setView(v){
+  state.view = normalizeView(v);
+  try{ history.replaceState(null,'', '#'+state.view); }catch(e){}
+  render();
+}
+function render(){
+  if(!state.results) return;
+  state.view = normalizeView(state.view);
+  syncTabs();
+  const today = nyDate(new Date()), offset = offsetFor(state.view);
+  document.getElementById('lbl-today').textContent = state.sample ? '' : labelDate(today);
+  document.getElementById('lbl-tomorrow').textContent = state.sample ? '' : labelDate(addDays(today,1));
+  document.getElementById('lbl-saturday').textContent = labelDate(addDays(today, satOffset())).replace(/^\w+, /,'');
+  const models = BEACHES.map((b,i)=>{
+    const r = state.results[i];
+    const base = r.sample ? nyDate(r.srf.issued) : today;
+    return buildModel(b, r, base, offset);
+  });
+  const v = verdict(models);
+  if(v && !v.tossUp) v.winner.isPick = true;
+  renderVerdict(v, VIEW_NAME[state.view], state.sample ? '' : labelDate(addDays(today, offset)).replace(/^\w+, /,''));
+  document.getElementById('beaches').innerHTML = models.map(renderBeach).join('');
+  document.getElementById('tagline').textContent = tagline(models, VIEW_NAME[state.view]);
+}
+
+let loading = false;
+async function load(){
+  if(loading) return; loading = true;
+  const btn = document.getElementById('refresh'); btn.textContent = 'Refreshing\u2026'; btn.disabled = true;
+  const srfByOffice = {};
+  for(const b of BEACHES) srfByOffice[b.office] ??= fetchSRF(b.office);
+  const results = await Promise.all(BEACHES.map(async b=>{
+    const [srf,point,tides,water] = await Promise.allSettled([srfByOffice[b.office], fetchPoint(b), fetchTides(b), fetchWater(b)]);
+    const val = s => s.status==='fulfilled' ? s.value : null;
+    return { srf:val(srf), point:val(point), tides:val(tides), water:val(water), anyOK:[srf,point,tides].some(s=>s.status==='fulfilled') };
+  }));
+
+  const notice = document.getElementById('notice');
+  if(results.every(r=>!r.anyOK)){
+    // No network access to NWS/NOAA: show the last surf zone forecasts of the season as a sample
+    state.sample = true;
+    state.results = BEACHES.map(b=>{ const s=SAMPLE[b.office]; return { sample:true, srf:{text:s.text, issued:new Date(s.issued)} }; });
+    notice.innerHTML = `<b>Sample data.</b> This view can't reach weather.gov or NOAA, so it is showing the last Surf Zone Forecasts NWS issued this season (Narragansett: Sep 4, Hampton: Oct 12). Open the app in a regular web browser to load live forecasts and tides.`;
+    notice.hidden = false;
+  } else {
+    state.sample = false; state.results = results; notice.hidden = true;
+  }
+  render();
+  document.getElementById('updated').textContent = 'Last updated: ' + new Intl.DateTimeFormat('en-US',{hour:'numeric',minute:'2-digit',weekday:'long',month:'long',day:'numeric',year:'numeric',timeZoneName:'short'}).format(new Date());
+  btn.textContent = 'Refresh'; btn.disabled = false; loading = false;
+}
+
+for(const btn of document.querySelectorAll('.seg button')) btn.addEventListener('click', ()=>setView(btn.dataset.view));
+document.querySelector('.seg').addEventListener('keydown', e=>{
+  if(e.key!=='ArrowRight' && e.key!=='ArrowLeft') return;
+  const vis = VIEWS.filter(v=>!document.getElementById('tab-'+v).hidden);
+  const i = vis.indexOf(state.view), n = vis[(i + (e.key==='ArrowRight'?1:vis.length-1)) % vis.length];
+  setView(n); document.getElementById('tab-'+n).focus();
+});
+window.addEventListener('hashchange', ()=>{ const h=location.hash.replace('#',''); if(VIEWS.includes(h) && h!==state.view) setView(h); });
+document.getElementById('refresh').addEventListener('click', load);
+setInterval(load, REFRESH_MIN*60000);
+state.view = initialView();
+load();
+</script>
